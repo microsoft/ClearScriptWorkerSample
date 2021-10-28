@@ -1,1 +1,1 @@
-This repository contains a simple console application that demonstrates a facility similar to [Web Workers](https://html.spec.whatwg.org/#workers) implemented with [ClearScript](https://github.com/microsoft/ClearScript).
+This repository contains a simple console application that demonstrates a basic facility similar to [Web Workers](https://html.spec.whatwg.org/#workers) implemented with [ClearScript](https://github.com/microsoft/ClearScript).
