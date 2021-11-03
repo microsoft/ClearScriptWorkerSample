@@ -30,6 +30,7 @@ namespace ClearScriptWorkerSample
         public string GetCanonicalJson(string json) => (string)Engine.Evaluate($"JSON.stringify({json})");
 
         public void PostExecuteCode(string code) => _messageQueue.Enqueue(new ExecuteCodeMessage(code));
+        public void PostExecuteDocument(string url) => _messageQueue.Enqueue(new ExecuteDocumentMessage(url));
         public void PostCommandString(string command) => _messageQueue.Enqueue(new CommandStringMessage(command));
         public void PostCommandObject(string json) => _messageQueue.Enqueue(new CommandObjectMessage(json));
 
@@ -48,13 +49,18 @@ namespace ClearScriptWorkerSample
 
         private void Init(WorkerImpl parent)
         {
+            Engine.DocumentSettings.AccessFlags |= DocumentAccessFlags.EnableAllLoading;
             ((ScriptObject)Engine.Evaluate(@"(function (impl) {
-                Worker = function () {
+                Worker = function (url) {
                     const childImpl = impl.CreateChild();
                     this.postExecuteCode = childImpl.PostExecuteCode;
+                    this.postExecuteDocument = childImpl.PostExecuteDocument;
                     this.postCommandString = childImpl.PostCommandString;
                     this.postCommandObject = obj => childImpl.PostCommandObject(JSON.stringify(obj));
                     this.terminate = childImpl.Dispose;
+                    if (typeof(url) === 'string') {
+                        this.postExecuteDocument(url);
+                    }
                 }
             })")).Invoke(false, this);
 

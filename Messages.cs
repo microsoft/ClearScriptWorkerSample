@@ -28,6 +28,27 @@ namespace ClearScriptWorkerSample
         }
     }
 
+    internal class ExecuteDocumentMessage : IMessage
+    {
+        private readonly string _url;
+
+        public ExecuteDocumentMessage(string url) => _url = url;
+
+        bool IMessage.Handle(WorkerImpl impl)
+        {
+            try
+            {
+                impl.Engine.ExecuteDocument(_url);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine("Exception in ExecuteDocument message handler: " + exception);
+                return false;
+            }
+        }
+    }
+
     internal class CommandStringMessage : IMessage
     {
         private readonly string _command;

@@ -10,4 +10,13 @@
     <PackageReference Include="Microsoft.ClearScript" Version="7.1.7" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Game.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Player.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
