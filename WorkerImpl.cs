@@ -11,6 +11,7 @@ namespace ClearScriptWorkerSample
         private readonly Func<ScriptEngine> _engineFactory;
         private readonly AsyncQueue<IMessage> _messageQueue = new AsyncQueue<IMessage>();
         private readonly TaskCompletionSource _exitSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly ScriptObject _worker;
 
         public WorkerImpl(Func<ScriptEngine> engineFactory)
         {
@@ -18,9 +19,10 @@ namespace ClearScriptWorkerSample
             Init(null);
         }
 
-        private WorkerImpl(WorkerImpl parent)
+        private WorkerImpl(WorkerImpl parent, ScriptObject worker)
         {
             Engine = (_engineFactory = parent._engineFactory)();
+            _worker = worker;
             Init(parent);
         }
 
@@ -31,19 +33,24 @@ namespace ClearScriptWorkerSample
 
         public void PostExecuteCode(string code) => _messageQueue.Enqueue(new ExecuteCodeMessage(code));
         public void PostExecuteDocument(string url) => _messageQueue.Enqueue(new ExecuteDocumentMessage(url));
-        public void PostCommandString(string command) => _messageQueue.Enqueue(new CommandStringMessage(command));
-        public void PostCommandObject(string json) => _messageQueue.Enqueue(new CommandObjectMessage(json));
+        public void PostCommandString(string command, ScriptObject sourceWorker = null) => _messageQueue.Enqueue(new CommandStringMessage(command, sourceWorker));
+        public void PostCommandObject(string json, ScriptObject sourceWorker = null) => _messageQueue.Enqueue(new CommandObjectMessage(json, sourceWorker));
 
         public void PostExit() => _messageQueue.Enqueue(new ExitMessage());
         public Task WaitForExitAsync() => _exitSource.Task;
 
-        public WorkerImpl CreateChild() => new WorkerImpl(this);
+        public WorkerImpl CreateChild(ScriptObject worker) => new WorkerImpl(this, worker);
 
-        public void FireEvent(string name, params object[] args)
+        public async Task FireEventAsync(ScriptObject sourceWorker, string name, params object[] args)
         {
-            if (Engine.Script["on" + name] is ScriptObject function)
+            var funcName = "on" + name;
+            if (sourceWorker?.GetProperty(funcName) is ScriptObject workerFunc)
             {
-                function.Invoke(false, args);
+                await InvokeFuncAsync(workerFunc, args);
+            }
+            else if (Engine.Script[funcName] is ScriptObject globalFunc)
+            {
+                await InvokeFuncAsync(globalFunc, args);
             }
         }
 
@@ -52,7 +59,7 @@ namespace ClearScriptWorkerSample
             Engine.DocumentSettings.AccessFlags |= DocumentAccessFlags.EnableAllLoading;
             ((ScriptObject)Engine.Evaluate(@"(function (impl) {
                 Worker = function (url) {
-                    const childImpl = impl.CreateChild();
+                    const childImpl = impl.CreateChild(this);
                     this.postExecuteCode = childImpl.PostExecuteCode;
                     this.postExecuteDocument = childImpl.PostExecuteDocument;
                     this.postCommandString = childImpl.PostCommandString;
@@ -66,8 +73,8 @@ namespace ClearScriptWorkerSample
 
             if (parent != null)
             {
-                Engine.Script.postCommandString = new Action<string>(parent.PostCommandString);
-                Engine.Script.postCommandObject = new Action<object>(obj => parent.PostCommandObject(Engine.Script.JSON.stringify(obj)));
+                Engine.Script.postCommandString = new Action<string>(command => parent.PostCommandString(command, _worker));
+                Engine.Script.postCommandObject = new Action<object>(obj => parent.PostCommandObject(Engine.Script.JSON.stringify(obj), _worker));
             }
 
             Engine.Script.postExit = new Action(PostExit);
@@ -79,13 +86,22 @@ namespace ClearScriptWorkerSample
             while (true)
             {
                 var message = await _messageQueue.DequeueAsync();
-                if (!message.Handle(this))
+                if (!await message.HandleAsync(this))
                 {
                     break;
                 }
             }
 
             _exitSource.SetResult();
+        }
+
+        private async Task InvokeFuncAsync(ScriptObject func, params object[] args)
+        {
+            var result = func.Invoke(false, args);
+            if (result is Task task)
+            {
+                await task;
+            }
         }
 
         public void Dispose()

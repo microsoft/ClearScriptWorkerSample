@@ -8,12 +8,15 @@ onCommandObject = async function (command) {
         players = [];
         for (let index = 0; index < 2; ++index) {
             players.push({ name: command.begin.playerNames[index], score: 0, worker: new Worker('Player.js') });
+            players[index].worker.onCommandObject = onPlayerCommandObject;
             players[index].worker.postCommandObject({ setPlayerId: { playerId: index + 1 } });
         }
         Console.WriteLine(`First server: ${players[serverIndex = (Math.random() < 0.5) ? 0 : 1].name}.`);
         players[serverIndex].worker.postCommandObject({ serve: {} });
     }
-    else if (command.serve) {
+}
+onPlayerCommandObject = async function (command) {
+    if (command.serve) {
         let index = command.serve.playerId - 1;
         Console.WriteLine(`${players[index].name} serves: ${shots[shotCount = 0]}`);
         players[index ^ 1].worker.postCommandObject({ handleShot: {} });

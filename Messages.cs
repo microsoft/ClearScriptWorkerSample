@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Threading.Tasks;
+using Microsoft.ClearScript;
 
 namespace ClearScriptWorkerSample
 {
     internal interface IMessage
     {
-        bool Handle(WorkerImpl impl);
+        Task<bool> HandleAsync(WorkerImpl impl);
     }
 
     internal class ExecuteCodeMessage : IMessage
@@ -13,17 +15,17 @@ namespace ClearScriptWorkerSample
 
         public ExecuteCodeMessage(string code) => _code = code;
 
-        bool IMessage.Handle(WorkerImpl impl)
+        Task<bool> IMessage.HandleAsync(WorkerImpl impl)
         {
             try
             {
                 impl.Engine.Execute(_code);
-                return true;
+                return Task.FromResult(true);
             }
             catch (Exception exception)
             {
                 Console.WriteLine("Exception in ExecuteCode message handler: " + exception);
-                return false;
+                return Task.FromResult(false);
             }
         }
     }
@@ -34,32 +36,37 @@ namespace ClearScriptWorkerSample
 
         public ExecuteDocumentMessage(string url) => _url = url;
 
-        bool IMessage.Handle(WorkerImpl impl)
+        Task<bool> IMessage.HandleAsync(WorkerImpl impl)
         {
             try
             {
                 impl.Engine.ExecuteDocument(_url);
-                return true;
+                return Task.FromResult(true);
             }
             catch (Exception exception)
             {
                 Console.WriteLine("Exception in ExecuteDocument message handler: " + exception);
-                return false;
+                return Task.FromResult(false);
             }
         }
     }
 
     internal class CommandStringMessage : IMessage
     {
+        private readonly ScriptObject _sourceWorker;
         private readonly string _command;
 
-        public CommandStringMessage(string command) => _command = command;
+        public CommandStringMessage(string command, ScriptObject sourceWorker)
+        {
+            _sourceWorker = sourceWorker;
+            _command = command;
+        }
 
-        bool IMessage.Handle(WorkerImpl impl)
+        async Task<bool> IMessage.HandleAsync(WorkerImpl impl)
         {
             try
             {
-                impl.FireEvent("CommandString", _command);
+                await impl.FireEventAsync(_sourceWorker, "CommandString", _command);
                 return true;
             }
             catch (Exception exception)
@@ -72,15 +79,20 @@ namespace ClearScriptWorkerSample
 
     internal class CommandObjectMessage : IMessage
     {
+        private readonly ScriptObject _sourceWorker;
         private readonly string _json;
 
-        public CommandObjectMessage(string json) => _json = json;
+        public CommandObjectMessage(string json, ScriptObject sourceWorker)
+        {
+            _sourceWorker = sourceWorker;
+            _json = json;
+        }
 
-        bool IMessage.Handle(WorkerImpl impl)
+        async Task<bool> IMessage.HandleAsync(WorkerImpl impl)
         {
             try
             {
-                impl.FireEvent("CommandObject", impl.ParseJson(_json));
+                await impl.FireEventAsync(_sourceWorker, "CommandObject", impl.ParseJson(_json));
                 return true;
             }
             catch (Exception exception)
@@ -93,11 +105,11 @@ namespace ClearScriptWorkerSample
 
     internal class ExitMessage : IMessage
     {
-        bool IMessage.Handle(WorkerImpl impl)
+        async Task<bool> IMessage.HandleAsync(WorkerImpl impl)
         {
             try
             {
-                impl.FireEvent("Exit");
+                await impl.FireEventAsync(null, "Exit");
             }
             catch (Exception exception)
             {
@@ -107,5 +119,4 @@ namespace ClearScriptWorkerSample
             return false;
         }
     }
-
 }
